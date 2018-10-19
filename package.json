@@ -1,0 +1,18 @@
+{
+  "name": "babel_incremental",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "fs-readdir-recursive": "^1.1.0"
+  },
+  "peerDependencies": {
+    "@babel/core": "^7.1.2"
+  },
+  "devDependencies": {
+    "yalc": "^1.0.0-pre.23"
+  },
+  "bin": {
+    "babel-incremental": "index.js"
+  }
+}
