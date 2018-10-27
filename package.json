@@ -1,13 +1,11 @@
 {
-  "name": "babel_incremental",
+  "name": "babel-incremental-cli",
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
   "dependencies": {
+    "find-cache-dir": "^2.0.0",
     "fs-readdir-recursive": "^1.1.0"
-  },
-  "peerDependencies": {
-    "@babel/core": "^7.1.2"
   },
   "devDependencies": {
     "prettier": "^1.14.3",

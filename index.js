@@ -1,85 +1,117 @@
 #!/usr/bin/env node
 
-;(function() {
-    // console.log(process.cwd())
-    // console.log(process.argv)
+const child_process = require('child_process')
+const fs = require('fs')
+const path = require('path')
 
-    const child_process = require('child_process')
-    const fs = require('fs')
-    const path = require('path')
+const findCacheDir = require('find-cache-dir')
+const readdir = require('fs-readdir-recursive')
 
-    const readdir = require('fs-readdir-recursive')
-
-    const args = process.argv.slice(2)
-    const doubleDashIndex = args.indexOf('--')
-
-    let files = []
-    let babel = []
-    if (doubleDashIndex === -1) {
-        files = args
-    } else {
-        files = args.slice(0, doubleDashIndex)
-        babel = args.slice(doubleDashIndex + 1)
+let MANIFEST_PATH
+function getManifestPath() {
+    if (MANIFEST_PATH) {
+        return MANIFEST_PATH
     }
-    const babelCommand = babel.length ? babel.join(' ') : 'babel'
+    const manifestPathFinder = findCacheDir({
+        name: 'babel-incremental-cli',
+        create: true,
+        thunk: true,
+    })
+    return (MANIFEST_PATH = manifestPathFinder(
+        'lastBuildManifest.json',
+    ))
+}
 
-    let builtFileManifest
+function getLastBuildManifest() {
+    const manifestPath = getManifestPath()
     try {
-        builtFileManifest = JSON.parse(
-            fs.readFileSync('babel-incremental-manifest.json', {
+        return JSON.parse(
+            fs.readFileSync(manifestPath, {
                 encoding: 'utf-8',
             }),
         )
     } catch (e) {
-        builtFileManifest = {}
+        return {}
     }
-    // console.log(builtFileManifest)
+}
 
-    const sourceFileManifest = files.reduce((manifest, filename) => {
+const COMPILABLE_EXTENSIONS = Object.freeze([
+    '.js',
+    '.jsx',
+    '.es6',
+    '.es',
+    '.mjs',
+])
+
+const isCompilable = filename =>
+    COMPILABLE_EXTENSIONS.includes(path.extname(filename))
+
+const getModificationTime = filename => fs.statSync(filename).ctimeMs
+
+function getCurrentBuildManifest(files) {
+    return files.reduce((manifest, filename) => {
         if (!fs.existsSync(filename)) {
             return manifest
         }
 
-        const currentManifest = {}
         if (fs.statSync(filename).isDirectory(filename)) {
-            readdir(filename).forEach(innerFilename => {
-                const fullpath = path.join(filename, innerFilename)
-                if (path.extname(fullpath) === '.js') {
-                    currentManifest[fullpath] = fs.statSync(fullpath).ctimeMs
-                }
-            })
-        } else {
-            if (path.extname(filename) === '.js') {
-                currentManifest[filename] = fs.statSync(filename).ctimeMs
-            }
+            readdir(filename)
+                .filter(isCompilable)
+                .forEach(innerFilename => {
+                    const fullpath = path.join(filename, innerFilename)
+                    manifest[fullpath] = getModificationTime(fullpath)
+                })
+        } else if (isCompilable(filename)) {
+            manifest[filename] = getModificationTime(filename)
         }
 
-        return {
-            ...manifest,
-            ...currentManifest,
-        }
+        return manifest
     }, {})
-    // console.log(sourceFileManifest)
+}
 
-    const filesToBabelize = Object.keys(sourceFileManifest).filter(
+function splitFilesAndBabelCommand() {
+    const args = process.argv.slice(2)
+    const doubleDashIndex = args.indexOf('--')
+
+    if (doubleDashIndex === -1) {
+        return {
+            inputFiles: args,
+            babelCommand: 'babel',
+        }
+    } else {
+        return {
+            inputFiles: args.slice(0, doubleDashIndex),
+            babelCommand: args.slice(doubleDashIndex + 1).join(' '),
+        }
+    }
+}
+
+function writeCurrentBuildManifest(currentBuildManifest) {
+    const manifestPath = getManifestPath()
+    fs.writeFileSync(manifestPath, JSON.stringify(currentBuildManifest), {
+        encoding: 'utf-8',
+    })
+}
+
+function main() {
+    const { inputFiles, babelCommand } = splitFilesAndBabelCommand()
+
+    const lastBuildManifest = getLastBuildManifest()
+    const currentBuildManifest = getCurrentBuildManifest(inputFiles)
+
+    const filesToBabelize = Object.keys(currentBuildManifest).filter(
         filename =>
-            builtFileManifest[filename] !== sourceFileManifest[filename],
+            lastBuildManifest[filename] !== currentBuildManifest[filename],
     )
-    // console.log(filesToBabelize)
-
-    const command = `${babelCommand} ${filesToBabelize.join(' ')}`
-    console.log(command)
-    return
 
     if (filesToBabelize.length) {
+        const command = `${babelCommand} ${filesToBabelize.join(' ')}`
         child_process.execSync(command, { stdio: 'inherit' })
     } else {
-        console.log('all files are up to date, nothing to be done')
+        console.log('All files are up to date, nothing to be done')
     }
 
-    fs.writeFileSync(
-        'babel-incremental-manifest.json',
-        JSON.stringify(sourceFileManifest),
-        { encoding: 'utf-8' },
-    )
-})()
+    writeCurrentBuildManifest(currentBuildManifest)
+}
+
+main()
