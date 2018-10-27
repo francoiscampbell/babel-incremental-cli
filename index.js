@@ -17,9 +17,7 @@ function getManifestPath() {
         create: true,
         thunk: true,
     })
-    return (MANIFEST_PATH = manifestPathFinder(
-        'lastBuildManifest.json',
-    ))
+    return (MANIFEST_PATH = manifestPathFinder('lastBuildManifest.json'))
 }
 
 function getLastBuildManifest() {
@@ -108,7 +106,11 @@ function main() {
         const command = `${babelCommand} ${filesToBabelize.join(' ')}`
         child_process.execSync(command, { stdio: 'inherit' })
     } else {
-        console.log('All files are up to date, nothing to be done')
+        console.log(
+            `${path.basename(
+                process.cwd(),
+            )}: All files are up to date, nothing to be done`,
+        )
     }
 
     writeCurrentBuildManifest(currentBuildManifest)
